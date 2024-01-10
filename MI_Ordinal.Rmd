@@ -1,0 +1,334 @@
+---
+title: "Measurement Invariance with Ordinal Data"
+subtitle:  <span style="color:#B51F26">PSICOSTAT 3.3 Meeting</span>
+author: "Enrico Perinelli   \n_Department of Psychology and Cognitive Science, University of Trento_"
+date: 'June 17, 2022'
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This document is an Appendix of the main presentation **Measurement Invariance with Structural Equation Modeling**. In particular, this Appendix may be useful for the interpretation of the section ***MI with Ordinal Variables***
+
+The items refer to the Italian version of the *Short Negative Acts Questionnaire* (SNAQ; Balducci et al., [2010](https://www.rivisteweb.it/doi/10.1482/32024); Notelaers et al., [2019](https://doi.org/10.1080/02678373.2018.1457736))
+
+It is important to specify that (due to the imbalance of the cells) two categories (4 and 5) were collapsed to one category (i.e., 4). Below, you can find the syntax with the relative item content (note that the value of 5 is collapsed in the value of 4)[^1].
+
+[^1]: See DiStefano, Shi, & Morgan ([2021](https://doi.org/10.1080/10705511.2020.1803073)) and Rutkowski, Svetina, & Liaw ([2019](https://doi.org/10.1080/10705511.2018.1547640)) for a debate on this issue
+
+```{r eval=FALSE}
+# Proseguiamo l’intervista chiedendole di indicare con che frequenza, negli ultimi sei mesi, ha subìto ciascuno dei seguenti comportamenti nel suo luogo di lavoro
+# 1 = mai, 2 = Una volta in tutto o di tanto in tanto, 3 = mensilmente, 4 = Settimanalmente, 5 = Quotidianamente 
+
+dat <- mobbing_data2 %>%  mutate(  
+  snaq1=replace(snaq1, snaq1==5, 4),
+  # Le sono state nascoste informazioni che influenzano il suo lavoro
+  snaq2=replace(snaq2, snaq2==5, 4),
+  # Sono state diffuse chiacchiere e dicerie nei suoi riguardi
+  snaq3=replace(snaq3, snaq3==5, 4),
+  # Lei è stato/a ignorato/a, escluso/a o emarginato/a
+  snaq4=replace(snaq4, snaq4==5, 4),
+  # Sono state fatte osservazioni offensive sulla sua persona (ad es. sulle sue abitudini), sui suoi atteggiamenti o sulla sua vita privata
+  snaq5=replace(snaq5, snaq5==5, 4),
+  # Hanno alzato la voce con lei o è stato/a bersaglio di attacchi istintivi di rabbia
+  snaq6=replace(snaq6, snaq6==5, 4),
+  # Le hanno fatto notare i suoi errori
+  snaq7=replace(snaq7, snaq7==5, 4),
+  # Nel rivolgersi agli altri è stato/a ignorato/a o si è imbattuto in reazioni ostili
+  snaq8=replace(snaq8, snaq8==5, 4),
+  # Hanno criticato il suo lavoro ed il suo impegno
+    snaq9=replace(snaq9, snaq9==5, 4)) %>%
+  # Le sono stati fatti scherzi spiacevoli da persone con le quali non va d’accordo    
+  select(gender, snaq1:snaq9, mob1_numeric) # the variable mob1_numeric is not necessary for the scope of this Appendix
+```
+
+Furthermore, given that this document is an extract of a wider article (Perinelli, Balducci, & Fraccaroli, under review, see also here <http://dx.doi.org/10.13140/RG.2.2.26701.10720>), keep in mind that several packages listed below are not necessary for the invariance analysis reported subsequently.
+
+Note that I have used the procedure and the scripts described in Svetina, Rutkowski, & Rutkowski (2020, Multiple-group invariance with categorical outcomes using updated guidelines: An illustration using Mplus and the lavaan/semTools packages. *Structural Equation Modeling, 27*, 111--130. <https://doi.org/10.1080/10705511.2019.1602776>)
+
+## Load Libraries and Environment
+
+```{r results='hide', warning=FALSE, echo=T, error=FALSE, eval=T, message=FALSE}
+
+library(dplyr)
+library(readxl)
+library(psych)
+library(apaTables)
+library(formattable)
+library(lavaan)
+library(semTools)
+library(MplusAutomation)
+library(pROC)
+library(randomForest)
+library(WVPlots)
+library(gridExtra)
+
+# added for this appendix
+library(summarytools)
+
+load("../.RData")
+```
+
+## Gender $x$ Age Stats
+
+The sample consists of 357 Italian workers
+
+```{r, results='asis',warning = FALSE, message = F}
+summarytools::st_css(bootstrap = FALSE) # set to FALSE, otherwise too wide tables
+mobbing_data2 %$% summarytools::ctable(age_range,
+                                       gender, style = 'rmarkdown',
+                                       chisq = TRUE,
+                                       headings = FALSE) %>%
+  print(method="render")
+```
+
+## Kendall rank correlations (in APA style) {.tabset}
+
+The package `apaTables` only formats tables for Pearson correlations.  
+
+Luckily, here you can find how to use that package also for Kendall rank correlations: <https://github.com/dstanley4/apaTables/issues/18>\
+Note that you have to install a `apa_tables_mod.zip` file in a proper folder, and then call it with the `source` function.
+
+```{r results='hide', warning=FALSE, echo=T, error=FALSE, eval=T, message=FALSE}
+source("../analysis.R/apa_tables_mod/apaCorrelationTable_mod.R")
+source("../analysis.R/apa_tables_mod//apaTables.R")
+source("../analysis.R/apa_tables_mod/rtfMakeTable.R")
+source("../analysis.R/apa_tables_mod/rtfMakeDocument.R")
+
+library(tidyverse)
+```
+
+### Whole sample
+
+```{r}
+mobbing_data2 %>%
+  select(snaq1, snaq2, snaq3, snaq4, snaq5, snaq6, snaq7, snaq8,snaq9) %>%
+  apa.cor.table(., table.number=1, landscape = F, cor.method = "kendall") %>% 
+  pluck(., 3) %>%
+  knitr::kable(.)
+```
+
+### Male sample
+
+```{r}
+mobbing_data2 %>%
+  filter (gender == "male") %>%
+  select(snaq1, snaq2, snaq3, snaq4, snaq5, snaq6, snaq7, snaq8,snaq9) %>%
+  apa.cor.table(., table.number=1, landscape = F, cor.method = "kendall") %>% 
+  pluck(., 3) %>%
+  knitr::kable(.)
+```
+
+### Female sample
+
+```{r}
+mobbing_data2 %>%
+  filter (gender == "female") %>%
+  select(snaq1, snaq2, snaq3, snaq4, snaq5, snaq6, snaq7, snaq8,snaq9) %>%
+  apa.cor.table(., table.number=1, landscape = F, cor.method = "kendall") %>% 
+  pluck(., 3) %>%
+  knitr::kable(.)
+```
+
+## Reliability for ordinal data
+
+Computation of the Nonlinear SEM Reliability Coefficient (Yang & Green, [2015](https://psycnet.apa.org/doi/10.1027/1614-2241/a000087)) and AVE for S-NAQ, through `reliability()` function of `semTools` package (`omega3` and `avevar` output, respectively)
+
+```{r}
+fit_snaq_total <- cfa(model_snaq, data=dat, ordered=c("snaq1","snaq2","snaq3","snaq4", "snaq5",
+                                                      "snaq6","snaq7", "snaq8", "snaq9"),
+                      estimator="WLSMV")
+
+fit_snaq_gender <- cfa(model_snaq, data=dat, ordered=c("snaq1","snaq2","snaq3","snaq4", "snaq5",
+                                                       "snaq6","snaq7", "snaq8", "snaq9"),
+                       estimator="WLSMV", group = "gender")
+
+semTools::reliability(fit_snaq_total)
+semTools::reliability(fit_snaq_gender)
+```
+
+### Summary of reliability results
+
+```{r}
+knitr::kable(data.frame
+             (Sample = c("Whole",
+                         "Male",
+                         "Female"),
+              rho_nl = c(round(semTools::reliability(fit_snaq_total, what = "omega3")[1,1], 2),
+                         round(semTools::reliability(fit_snaq_gender, what = "omega3")$male[1,1],2),
+                         round(semTools::reliability(fit_snaq_gender, what = "omega3")$female[1,1],2)),
+              AVE = c(round(semTools::reliability(fit_snaq_total, what = "ave")[1,1], 2), 
+                      round(semTools::reliability(fit_snaq_gender, what = "ave")$male[1,1],2),
+                      round(semTools::reliability(fit_snaq_gender, what = "ave")$female[1,1],2))
+               ),
+             col.names = c("Sample", "$\\rho_{NL}$", "$AVE$"),
+             format = "simple"
+             )
+```
+
+
+
+
+## Scripts and Results {.tabset}
+
+In the following tabsets you can find the three models for the invariance analysis with ordinal data (see Svetina, Rutkowski, & Rutkowski, [2020](https://doi.org/10.1080/10705511.2019.1602776), for more info and M*plus* equivalent scripts)
+
+### Baseline Model
+
+```{r}
+#### INVARIANCE
+
+# empty matrix in which we will put results
+all.results<-matrix(NA, nrow = 3, ncol = 6)
+
+# Specifying the baseline model with four items
+mod.cat <- 'F1 =~ snaq1 + snaq2 + snaq3 + snaq4 + snaq5 + snaq6 + snaq7 + snaq8 + snaq9'
+
+# Baseline model: no constraints across groups or repeated measures
+baseline <- measEq.syntax(configural.model = mod.cat,
+                          data = dat,
+                          ordered = c("snaq1", "snaq2", "snaq3", "snaq4", "snaq5", "snaq6",
+                                      "snaq7", "snaq8", "snaq9"),
+                          parameterization = "delta",
+                          ID.fac = "std.lv",
+                          ID.cat = "Wu.Estabrook.2016",
+                          group = "gender",
+                          group.equal = "configural" )
+
+# For a little bit of orientation/instructions in what model looks like
+summary(baseline)
+# To see all of the constraints in the model
+cat(as.character(baseline))
+# Have to specify as.character to submit to lavaan
+model.baseline <- as.character(baseline)
+# Fitting baseline model in lavaan via cfa function
+fit.baseline <- cfa(model.baseline, data = dat, group = "gender",
+                    ordered = c("snaq1", "snaq2", "snaq3", "snaq4", "snaq5", "snaq6",
+                                "snaq7", "snaq8", "snaq9"))
+
+
+
+# Obtaining results from baseline model
+summary(fit.baseline, fit.measures=TRUE, rsquare=TRUE)
+# Extracting fit indices into the first row of all results matrix
+all.results[1,]<-round(data.matrix(fitmeasures(fit.baseline,
+                                               fit.measures = c("chisq.scaled","df.scaled","pvalue.scaled",
+                                                                "cfi.scaled", "tli.scaled", "rmsea.scaled"))),
+                                                                digits=3)
+```
+
+### Equal Thresholds Model
+
+```{r}
+# To remain consistent with Wu and Estabrook's (2016) notation, we call this step as prop4 to indicate the
+# alignment with Proposition 4 in Wu and Estabrook's article.
+prop4 <- measEq.syntax(configural.model = mod.cat,
+                       data = dat,
+                       ordered = c("snaq1", "snaq2", "snaq3", "snaq4", "snaq5", "snaq6",
+                                   "snaq7", "snaq8", "snaq9"),
+                                   parameterization = "delta",
+                                   ID.fac = "std.lv",
+                                   ID.cat = "Wu.Estabrook.2016",
+                                   group = "gender",
+                                   group.equal = c("thresholds"))
+
+model.prop4 <- as.character(prop4)
+
+# Fitting thresholds invariance model in lavaan via cfa function
+fit.prop4 <- cfa(model.prop4, data = dat, group ="gender",
+                 ordered = c("snaq1", "snaq2", "snaq3", "snaq4", "snaq5", "snaq6",
+                             "snaq7", "snaq8", "snaq9"))
+
+# Obtaining results from thresholds invariance model
+summary(fit.prop4, fit.measures=TRUE, rsquare=TRUE)
+
+# Extracting fit indices into the second row of all results matrix
+all.results[2,]<-round(data.matrix(fitmeasures(fit.prop4,
+                                          fit.measures = c("chisq.scaled","df.scaled","pvalue.scaled",
+                                                            "cfi.scaled", "tli.scaled", "rmsea.scaled"))),
+                       digits=3)
+
+lavTestLRT(fit.baseline,fit.prop4)
+```
+
+### Equal Thresholds and Loadings Model
+
+```{r}
+# Proposition 7 per Wu and Estabrook (2016)
+prop7 <- measEq.syntax(configural.model = mod.cat,
+                       data = dat,
+                       ordered = c("snaq1", "snaq2", "snaq3", "snaq4", "snaq5", "snaq6",
+                                   "snaq7", "snaq8", "snaq9"),
+                                   parameterization = "delta",
+                                   ID.fac = "std.lv",
+                                   ID.cat = "Wu.Estabrook.2016",
+                                   group = "gender",
+                                   group.equal = c("thresholds","loadings"))
+model.prop7 <- as.character(prop7)
+
+fit.prop7 <- cfa(model.prop7, data = dat, group =
+                   "gender", ordered = c("snaq1", "snaq2", "snaq3", "snaq4", "snaq5", "snaq6",
+                                         "snaq7", "snaq8", "snaq9"))
+summary(fit.prop7, fit.measures=TRUE, rsquare=TRUE)
+
+# Extracting fit indices into the third row of all results matrix
+all.results[3,]<-round(data.matrix(fitmeasures(fit.prop7,
+                                               fit.measures = c("chisq.scaled","df.scaled","pvalue.scaled",
+                                                                "cfi.scaled", "tli.scaled", "rmsea.scaled"))), digits=3)
+lavTestLRT(fit.prop4, fit.prop7)
+```
+
+## Summary of Results
+
+### Indices of Fit
+
+```{r}
+summary_sem <- cbind(c("Baseline", "Equal Tresholds", "Equal Tresholds and Loadings"), all.results) %>%
+  as.data.frame() %>% 
+  rename(Model = V1,
+         WLSMV_based_chi2 = V2,
+         df = V3,
+         p_value = V4,
+         CFI = V5,
+         TLI = V6,
+         RMSEA = V7
+         ) 
+
+summary_sem %>% 
+  knitr::kable()
+```
+
+### Model comparison
+
+```{r}
+summary_2 <- rbind(
+(lavTestLRT(fit.baseline,fit.prop4)),
+(lavTestLRT(fit.prop4, fit.prop7))
+)[c(1,2,4), c(5,6,7)] %>%
+  as_tibble() %>%
+  round(., 3)
+
+summary_2 %>% 
+  knitr::kable()
+```
+
+### Merge results
+
+```{r}
+options(knitr.kable.NA = '-') # This command allows to report "-" instead of "NA" when printing a Kable
+
+cbind(summary_sem, summary_2) %>% 
+    knitr::kable(., "simple",
+               col.names = c("Model", "WLSMV-based$\\chi^2$", "$df$", "$p$", "CFI", "TLI", "RMSEA",
+                             "Scaled-$\\Delta\\chi^2$", "$\\Delta df$", "$p$"),
+               align = c("l", "c", "c", "c", "c", "c", "c", "c", "c", "c"))
+```
+
+
